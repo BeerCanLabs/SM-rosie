@@ -1,0 +1,6 @@
+type: discord
+config:
+  command_prefix: "!rosie"
+  intents:
+    - messages
+    - guilds
