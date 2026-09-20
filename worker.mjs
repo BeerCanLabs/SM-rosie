@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dir = process.env.MEMORY_DIR || '/tmp/rosie-mind';
-const { FACTORY_URL, FACTORY_RUN_ID, FACTORY_RUN_TOKEN, ROSIE_DISCORD_BOT_TOKEN } = process.env;
+const { FACTORY_URL, FACTORY_RUN_ID, FACTORY_RUN_TOKEN } = process.env; const ROSIE_DISCORD_BOT_TOKEN = Object.entries(process.env).find(([k]) => k.includes("ROSIE_DISCORD_BOT_TOKEN"))?.[1];
 
 mkdirSync(dir, { recursive: true });
 console.log(`[rosie] woke; mind at ${dir}`);
