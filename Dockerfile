@@ -1,7 +1,13 @@
-FROM ghcr.io/beercanlabs/factory-agent-generic:latest
+FROM node:22-alpine
+
+RUN apk add --no-cache aws-cli
+WORKDIR /app
 
 COPY soul.md /agent/soul.md
 COPY surface.yaml /agent/surface.yaml
 COPY secrets.manifest.yaml /agent/secrets.manifest.yaml
+COPY worker.mjs /app/worker.mjs
 
-# The underlying runtime will parse these files and bootstrap the LLM persona.
+ENV MEMORY_DIR=/tmp/rosie-mind
+USER node
+CMD ["node", "/app/worker.mjs"]
