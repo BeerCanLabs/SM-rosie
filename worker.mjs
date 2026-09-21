@@ -62,6 +62,26 @@ async function hassCallService(domain, service, entityId) {
   return await res.json();
 }
 
+// Home Assistant Conversation / Jarvis API
+async function hassProcessConversation(text, agentId) {
+  const url = `${HASS_URL.replace(/\/$/, '')}/api/conversation/process`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${HA_LONG_LIVED_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      ...(agentId ? { agent_id: agentId } : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Home Assistant conversation call failed: ${res.status} ${await res.text()}`);
+  }
+  return await res.json();
+}
+
 // Fallback logic for common commands if LLM is unavailable
 async function fallbackHandler(userText) {
   const lower = userText.toLowerCase();
@@ -120,8 +140,43 @@ async function main() {
   const userQuery = (input.content || '').replace(/^!rosie\s*/i, '').replace(/<@!?\d+>/g, '').trim();
   let replyText = '';
 
-  // 2. Process query with xAI Grok (if key present) or Fallback
-  if (XAI_API_KEY && userQuery) {
+  // 2. Try Home Assistant Assist / Conversation API first (Jarvis AI -> Local HA Intents)
+  if (HA_LONG_LIVED_TOKEN && userQuery) {
+    const candidateAgents = [
+      'conversation.google_ai_conversation', // Jarvis AI (Gemini)
+      'conversation.home_assistant',         // Built-in HA Intent Parser
+    ];
+    for (const agentId of candidateAgents) {
+      try {
+        console.log(`[rosie] Trying Home Assistant conversation agent: ${agentId}`);
+        const convRes = await hassProcessConversation(userQuery, agentId);
+        const speech = convRes?.response?.speech?.plain?.speech;
+        const respType = convRes?.response?.response_type;
+        const errorCode = convRes?.response?.data?.code;
+
+        // Skip if error, no match, or quota/credit exhaustion
+        if (
+          respType === 'error' ||
+          errorCode === 'no_intent_match' ||
+          (speech && (speech.includes('prepayment credits are depleted') || speech.includes('RESOURCE_EXHAUSTED')))
+        ) {
+          console.log(`[rosie] Agent ${agentId} unable to handle: ${errorCode || respType || speech}`);
+          continue;
+        }
+
+        if (speech) {
+          replyText = speech;
+          console.log(`[rosie] Successfully handled by HA ${agentId}: "${replyText}"`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[rosie] Failed calling HA agent ${agentId}:`, err);
+      }
+    }
+  }
+
+  // 3. Process query with xAI Grok (if key present and HA didn't answer)
+  if (!replyText && XAI_API_KEY && userQuery) {
     try {
       console.log(`[rosie] Reasoning with xAI Grok for: "${userQuery}"`);
       const tools = [
@@ -174,7 +229,7 @@ async function main() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'grok-3',
+            model: 'grok-4.20-0309-non-reasoning',
             messages,
             tools,
             temperature: 0.3,
@@ -221,7 +276,7 @@ async function main() {
     }
   }
 
-  // If LLM returned empty or was skipped, run fallback
+  // 4. If still empty, run deterministic fallback
   if (!replyText) {
     replyText = await fallbackHandler(userQuery);
   }
