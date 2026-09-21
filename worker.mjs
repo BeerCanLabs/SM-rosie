@@ -112,35 +112,12 @@ async function fallbackHandler(userText) {
   return `Hello Dale! Rosie here, at your service! I heard: "${userText}". I can check battery levels or toggle your smart home devices!`;
 }
 
-// Main Rosie execution loop
-async function main() {
-  if (!FACTORY_URL || !FACTORY_RUN_ID || !FACTORY_RUN_TOKEN) {
-    console.log('[rosie] Running outside Factory context, exiting.');
-    return;
-  }
-
-  const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
-  const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}` };
-
-  // 1. Fetch run input
-  const resInput = await fetch(`${base}/input`, { headers: auth });
-  const { input } = await resInput.json();
-  console.log('[rosie] received input:', input);
-
-  if (!input || !input.channelId) {
-    console.log('[rosie] No channelId provided in input, finishing.');
-    await fetch(`${base}/result`, {
-      method: 'POST',
-      headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'succeeded', output: { error: 'no_channel' } }),
-    });
-    return;
-  }
-
+// Function to handle a single conversational turn
+async function handleTurn(input) {
   const userQuery = (input.content || '').replace(/^!rosie\s*/i, '').replace(/<@!?\d+>/g, '').trim();
   let replyText = '';
 
-  // 2. Try Home Assistant Assist / Conversation API first (Jarvis AI -> Local HA Intents)
+  // 1. Try Home Assistant Assist / Conversation API first (Jarvis AI -> Local HA Intents)
   if (HA_LONG_LIVED_TOKEN && userQuery) {
     const candidateAgents = [
       'conversation.google_ai_conversation', // Jarvis AI (Gemini)
@@ -175,7 +152,7 @@ async function main() {
     }
   }
 
-  // 3. Process query with xAI Grok (if key present and HA didn't answer)
+  // 2. Process query with xAI Grok (if key present and HA didn't answer)
   if (!replyText && XAI_API_KEY && userQuery) {
     try {
       console.log(`[rosie] Reasoning with xAI Grok for: "${userQuery}"`);
@@ -276,12 +253,12 @@ async function main() {
     }
   }
 
-  // 4. If still empty, run deterministic fallback
+  // 3. If still empty, run deterministic fallback
   if (!replyText) {
     replyText = await fallbackHandler(userQuery);
   }
 
-  // 3. Post reply to Discord
+  // 4. Post reply to Discord
   console.log(`[rosie] Sending reply to Discord channel ${input.channelId}...`);
   const botToken = ROSIE_DISCORD_BOT_TOKEN;
   if (botToken) {
@@ -295,12 +272,59 @@ async function main() {
     });
     console.log(`[rosie] Discord API response: ${discordRes.status}`);
   }
+}
 
-  // 4. Report result back to Factory Control Plane
+// Main Rosie execution loop
+async function main() {
+  if (!FACTORY_URL || !FACTORY_RUN_ID || !FACTORY_RUN_TOKEN) {
+    console.log('[rosie] Running outside Factory context, exiting.');
+    return;
+  }
+
+  const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
+  const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}` };
+
+  // 1. Fetch initial run input
+  const resInput = await fetch(`${base}/input`, { headers: auth });
+  const { input } = await resInput.json();
+  console.log('[rosie] received initial input:', input);
+
+  if (input && input.channelId) {
+    await handleTurn(input);
+  }
+
+  // 2. Stay warm in mailbox loop for 5 minutes (300,000 ms) of idle time
+  const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+  let lastActivity = Date.now();
+  console.log('[rosie] Entering warm session loop (5-minute idle window)...');
+
+  async function fetchMailbox(timeoutMs = 15000) {
+    try {
+      const res = await fetch(`${base}/mailbox?timeout=${timeoutMs}`, { headers: auth });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.message?.payload || null;
+    } catch (err) {
+      console.warn('[rosie] Error polling mailbox:', err);
+      return null;
+    }
+  }
+
+  while (Date.now() - lastActivity < IDLE_TIMEOUT_MS) {
+    const nextMsg = await fetchMailbox(15000);
+    if (nextMsg && nextMsg.channelId) {
+      console.log('[rosie] Follow-up message received from mailbox:', nextMsg);
+      lastActivity = Date.now();
+      await handleTurn(nextMsg);
+    }
+  }
+
+  console.log('[rosie] 5 minutes idle with no activity; scaling to zero.');
+  // Report result back to Factory Control Plane to gracefully close run
   const res = await fetch(`${base}/result`, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'succeeded', output: { replied: true } }),
+    body: JSON.stringify({ status: 'succeeded', output: { completed: true } }),
   });
   console.log(`[rosie] reported result to factory: ${res.status}`);
 }
