@@ -18,6 +18,8 @@ secrets:
       description: "Long-lived access token for Home Assistant REST API"
     - name: HASS_URL
       description: "Home Assistant base URL"
+    - name: NOTION_API_KEY
+      description: "Notion API Key for The Submind Operations Board"
     - name: XAI_API_KEY
       description: "xAI Grok API key for robotic intelligence and tool execution"
 
@@ -34,3 +36,9 @@ compute:
 
 runtime:
   warmDownSeconds: 3600
+
+skills:
+  - id: home-assistant
+    description: "Manage Home Assistant devices, scenes, states, and automations"
+  - id: notion
+    description: "Task and delivery tracking on The Submind Operations Board"
