@@ -1,0 +1,11 @@
+cases:
+  - id: wake-health-check
+    input:
+      type: http
+      path: /wake
+      message: healthcheck
+    expect:
+      status: DONE
+      contains:
+        - "Rosie"
+    timeoutSeconds: 30

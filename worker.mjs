@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const dir = process.env.MEMORY_DIR || '/tmp/rosie-mind';
 mkdirSync(dir, { recursive: true });
@@ -206,7 +205,7 @@ async function handleTurn(input) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'grok-4.20-0309-non-reasoning',
+            model: process.env.XAI_MODEL || 'grok-4.3',
             messages,
             tools,
             temperature: 0.3,
@@ -258,75 +257,133 @@ async function handleTurn(input) {
     replyText = await fallbackHandler(userQuery);
   }
 
-  // 4. Post reply to Discord
-  console.log(`[rosie] Sending reply to Discord channel ${input.channelId}...`);
-  const botToken = ROSIE_DISCORD_BOT_TOKEN;
-  if (botToken) {
-    const discordRes = await fetch(`https://discord.com/api/v10/channels/${input.channelId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bot ${botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ content: replyText }),
-    });
-    console.log(`[rosie] Discord API response: ${discordRes.status}`);
+  // 4. Post reply to Discord if channelId present
+  if (input.channelId) {
+    console.log(`[rosie] Sending reply to Discord channel ${input.channelId}...`);
+    const botToken = ROSIE_DISCORD_BOT_TOKEN;
+    if (botToken) {
+      const chunks = [replyText.slice(0, 1900)];
+      for (const chunk of chunks) {
+        const discordRes = await fetch(`https://discord.com/api/v10/channels/${input.channelId}/messages`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bot ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ content: chunk }),
+        });
+        console.log(`[rosie] Discord API response: ${discordRes.status}`);
+      }
+    }
+  }
+
+  return replyText;
+}
+
+async function readInput() {
+  if (process.env.FACTORY_INPUT) {
+    try {
+      return JSON.parse(process.env.FACTORY_INPUT);
+    } catch {
+      return { content: process.env.FACTORY_INPUT };
+    }
+  }
+  const inputFile = process.env.FACTORY_INPUT_FILE || '/tmp/factory-input.json';
+  if (existsSync(inputFile)) {
+    try {
+      return JSON.parse(readFileSync(inputFile, 'utf8'));
+    } catch {
+      return { content: readFileSync(inputFile, 'utf8') };
+    }
+  }
+  if (FACTORY_URL && FACTORY_RUN_ID && FACTORY_RUN_TOKEN) {
+    const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
+    const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}` };
+    try {
+      const res = await fetch(`${base}/input`, { headers: auth });
+      if (res.ok) {
+        const data = await res.json();
+        return data.input || data;
+      }
+    } catch (err) {
+      console.warn('[rosie] Failed to fetch input from factory:', err);
+    }
+  }
+  return { message: 'healthcheck', type: 'http' };
+}
+
+async function writeResult(result) {
+  const resultFile = process.env.FACTORY_RESULT_FILE || '/tmp/factory-result.json';
+  try {
+    writeFileSync(resultFile, JSON.stringify(result, null, 2), 'utf8');
+  } catch {}
+
+  if (FACTORY_URL && FACTORY_RUN_ID && FACTORY_RUN_TOKEN) {
+    const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
+    const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}`, 'Content-Type': 'application/json' };
+    try {
+      const res = await fetch(`${base}/result`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify(result),
+      });
+      console.log(`[rosie] reported result to factory: ${res.status}`);
+    } catch (err) {
+      console.warn('[rosie] Failed to report result to factory:', err);
+    }
   }
 }
 
 // Main Rosie execution loop
 async function main() {
-  if (!FACTORY_URL || !FACTORY_RUN_ID || !FACTORY_RUN_TOKEN) {
-    console.log('[rosie] Running outside Factory context, exiting.');
-    return;
-  }
+  console.log('[rosie] Head of Smart Home & Robotic Maid waking up...');
+  const initialInput = await readInput();
+  console.log('[rosie] received input:', initialInput);
+  const resultText = await handleTurn(initialInput);
 
-  const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
-  const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}` };
-
-  // 1. Fetch initial run input
-  const resInput = await fetch(`${base}/input`, { headers: auth });
-  const { input } = await resInput.json();
-  console.log('[rosie] received initial input:', input);
-
-  if (input && input.channelId) {
-    await handleTurn(input);
-  }
-
-  // 2. Stay warm in mailbox loop for 5 minutes (300,000 ms) of idle time
-  const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+  const warmDownSeconds = parseInt(process.env.WARM_DOWN_SECONDS || '3600', 10);
+  const idleTimeoutMs = warmDownSeconds * 1000;
   let lastActivity = Date.now();
-  console.log('[rosie] Entering warm session loop (5-minute idle window)...');
 
-  async function fetchMailbox(timeoutMs = 15000) {
-    try {
-      const res = await fetch(`${base}/mailbox?timeout=${timeoutMs}`, { headers: auth });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.message?.payload || null;
-    } catch (err) {
-      console.warn('[rosie] Error polling mailbox:', err);
-      return null;
+  if (FACTORY_URL && FACTORY_RUN_ID && FACTORY_RUN_TOKEN) {
+    const base = `${FACTORY_URL.replace(/\/$/, '')}/api/v1/runs/${FACTORY_RUN_ID}`;
+    const auth = { Authorization: `Bearer ${FACTORY_RUN_TOKEN}` };
+
+    console.log(`[rosie] Entering warm session loop (${warmDownSeconds}s idle window)...`);
+
+    async function fetchMailbox(timeoutMs = 15000) {
+      try {
+        const res = await fetch(`${base}/mailbox?timeout=${timeoutMs}`, { headers: auth });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.message?.payload || null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    while (Date.now() - lastActivity < idleTimeoutMs) {
+      const remainingMs = idleTimeoutMs - (Date.now() - lastActivity);
+      if (remainingMs <= 0) break;
+      const pollMs = Math.min(remainingMs, 20000);
+      const nextMsg = await fetchMailbox(pollMs);
+      if (nextMsg) {
+        console.log('[rosie] Follow-up message received from mailbox:', nextMsg);
+        lastActivity = Date.now();
+        await handleTurn(nextMsg);
+      }
     }
   }
 
-  while (Date.now() - lastActivity < IDLE_TIMEOUT_MS) {
-    const nextMsg = await fetchMailbox(15000);
-    if (nextMsg && nextMsg.channelId) {
-      console.log('[rosie] Follow-up message received from mailbox:', nextMsg);
-      lastActivity = Date.now();
-      await handleTurn(nextMsg);
-    }
-  }
-
-  console.log('[rosie] 5 minutes idle with no activity; scaling to zero.');
-  // Report result back to Factory Control Plane to gracefully close run
-  const res = await fetch(`${base}/result`, {
-    method: 'POST',
-    headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'succeeded', output: { completed: true } }),
+  console.log('[rosie] Warm window expired; scaling to zero.');
+  await writeResult({
+    status: 'succeeded',
+    output: {
+      agent: 'Rosie',
+      role: 'Home Assistant Infrastructure Manager & Robotic Maid',
+      summary: resultText,
+    },
   });
-  console.log(`[rosie] reported result to factory: ${res.status}`);
 }
 
 main().catch(async (err) => {
