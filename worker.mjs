@@ -28,20 +28,31 @@ async function hassGetStates(search) {
     throw new Error(`Home Assistant error: ${res.status} ${await res.text()}`);
   }
   const states = await res.json();
-  const q = (search || '').toLowerCase().trim();
-  return states
-    .filter((s) => {
-      if (!q) return true;
+  const rawQ = (search || '').toLowerCase().trim();
+  const terms = rawQ.split(/\s+/).filter(Boolean);
+
+  let filtered = states;
+  if (terms.length > 0) {
+    const allMatches = states.filter((s) => {
       const id = s.entity_id.toLowerCase();
       const name = (s.attributes?.friendly_name || '').toLowerCase();
-      return id.includes(q) || name.includes(q);
-    })
-    .slice(0, 30)
+      return terms.every((t) => id.includes(t) || name.includes(t));
+    });
+    filtered = allMatches.length > 0 ? allMatches : states.filter((s) => {
+      const id = s.entity_id.toLowerCase();
+      const name = (s.attributes?.friendly_name || '').toLowerCase();
+      return terms.some((t) => id.includes(t) || name.includes(t));
+    });
+  }
+
+  return filtered
+    .slice(0, 40)
     .map((s) => ({
       entity_id: s.entity_id,
       name: s.attributes?.friendly_name || s.entity_id,
       state: s.state,
       unit: s.attributes?.unit_of_measurement || '',
+      charging: s.attributes?.charging !== undefined ? s.attributes.charging : undefined,
     }));
 }
 
@@ -61,33 +72,13 @@ async function hassCallService(domain, service, entityId) {
   return await res.json();
 }
 
-// Home Assistant Conversation / Jarvis API
-async function hassProcessConversation(text, agentId) {
-  const url = `${HASS_URL.replace(/\/$/, '')}/api/conversation/process`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${HA_LONG_LIVED_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      text,
-      ...(agentId ? { agent_id: agentId } : {}),
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Home Assistant conversation call failed: ${res.status} ${await res.text()}`);
-  }
-  return await res.json();
-}
-
 // Fallback logic for common commands if LLM is unavailable
 async function fallbackHandler(userText) {
   const lower = userText.toLowerCase();
 
   // 1. Frame batteries
   if (lower.includes('frame') && lower.includes('battery')) {
-    const states = await hassGetStates('frame');
+    const states = await hassGetStates('frame battery');
     const batterySensors = states.filter((s) => s.entity_id.includes('battery') || s.name.toLowerCase().includes('battery'));
     if (batterySensors.length === 0) {
       return "Beep boop! I couldn't find any battery sensors for the frames in Home Assistant, Dale!";
@@ -116,45 +107,11 @@ async function handleTurn(input) {
   const userQuery = (input.content || '').replace(/^!rosie\s*/i, '').replace(/<@!?\d+>/g, '').trim();
   let replyText = '';
 
-  // 1. Try Home Assistant Assist / Conversation API first (Jarvis AI -> Local HA Intents)
-  if (HA_LONG_LIVED_TOKEN && userQuery) {
-    const candidateAgents = [
-      'conversation.google_ai_conversation', // Jarvis AI (Gemini)
-      'conversation.home_assistant',         // Built-in HA Intent Parser
-    ];
-    for (const agentId of candidateAgents) {
-      try {
-        console.log(`[rosie] Trying Home Assistant conversation agent: ${agentId}`);
-        const convRes = await hassProcessConversation(userQuery, agentId);
-        const speech = convRes?.response?.speech?.plain?.speech;
-        const respType = convRes?.response?.response_type;
-        const errorCode = convRes?.response?.data?.code;
-
-        // Skip if error, no match, or quota/credit exhaustion
-        if (
-          respType === 'error' ||
-          errorCode === 'no_intent_match' ||
-          (speech && (speech.includes('prepayment credits are depleted') || speech.includes('RESOURCE_EXHAUSTED')))
-        ) {
-          console.log(`[rosie] Agent ${agentId} unable to handle: ${errorCode || respType || speech}`);
-          continue;
-        }
-
-        if (speech) {
-          replyText = speech;
-          console.log(`[rosie] Successfully handled by HA ${agentId}: "${replyText}"`);
-          break;
-        }
-      } catch (err) {
-        console.warn(`[rosie] Failed calling HA agent ${agentId}:`, err);
-      }
-    }
-  }
-
-  // 2. Process query with xAI Grok (if key present and HA didn't answer)
-  if (!replyText && XAI_API_KEY && userQuery) {
+  // 1. Process query with xAI Grok reasoning model and live HA tools
+  if (XAI_API_KEY && userQuery) {
     try {
-      console.log(`[rosie] Reasoning with xAI Grok for: "${userQuery}"`);
+      const model = process.env.XAI_MODEL || 'grok-4.7';
+      console.log(`[rosie] Reasoning with xAI (${model}) for: "${userQuery}"`);
       const tools = [
         {
           type: 'function',
@@ -192,7 +149,7 @@ async function handleTurn(input) {
         {
           role: 'system',
           content:
-            "You are Rosie, Dale's cheerful, capable, robotic maid from the Jetsons managing his Home Assistant smart home. Always execute the appropriate tools to fetch live states or control devices before answering. Be concise, warm, helpful, and keep responses formatted nicely for Discord with markdown bullets and emojis.",
+            "You are Rosie, Dale's cheerful, highly capable robotic maid from the Jetsons managing his Home Assistant smart home. Always execute tools to inspect real-time states or control devices before answering. Provide direct, accurate, and neatly formatted Discord responses with bullets and relevant emojis.",
         },
         { role: 'user', content: userQuery },
       ];
@@ -205,7 +162,7 @@ async function handleTurn(input) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: process.env.XAI_MODEL || 'grok-4.3',
+            model,
             messages,
             tools,
             temperature: 0.3,
@@ -252,7 +209,7 @@ async function handleTurn(input) {
     }
   }
 
-  // 3. If still empty, run deterministic fallback
+  // 2. If still empty, run deterministic fallback
   if (!replyText) {
     replyText = await fallbackHandler(userQuery);
   }
