@@ -40,5 +40,11 @@ runtime:
 skills:
   - id: home-assistant
     description: "Manage Home Assistant devices, scenes, states, and automations"
+  - id: home-assistant-automations
+    description: "Create, update, toggle, reload, and troubleshoot Home Assistant automations"
+  - id: kitty-litter-monitoring
+    description: "Monitor Litter-Robot levels, waste drawer status, and health telemetry for Zander and Lexi"
+  - id: action-scheduling
+    description: "Schedule automated recurring and one-off agent actions with Factory Control Plane"
   - id: notion
     description: "Task and delivery tracking on The Submind Operations Board"
