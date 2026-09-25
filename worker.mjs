@@ -636,14 +636,19 @@ Provide direct, accurate, and neatly formatted Discord responses with bullets, s
   // Post reply to Discord if channelId present
   if (channelId) {
     console.log(`[rosie] Sending reply to Discord channel ${channelId}...`);
-    const botToken = ROSIE_DISCORD_BOT_TOKEN;
-    if (botToken) {
+    const baseUrl = (process.env.DISCORD_BASE_URL || 'https://discord.com/api/v10').replace(/\/$/, '');
+    const isGateway = !baseUrl.includes('discord.com');
+    const authHeader = isGateway && FACTORY_RUN_TOKEN
+      ? `Bearer ${FACTORY_RUN_TOKEN}`
+      : `Bot ${ROSIE_DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || ''}`;
+
+    if (isGateway || ROSIE_DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN) {
       const chunks = [replyText.slice(0, 1900)];
       for (const chunk of chunks) {
-        const discordRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        const discordRes = await fetch(`${baseUrl}/channels/${channelId}/messages`, {
           method: 'POST',
           headers: {
-            Authorization: `Bot ${botToken}`,
+            Authorization: authHeader,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ content: chunk }),
