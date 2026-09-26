@@ -633,8 +633,8 @@ Provide direct, accurate, and neatly formatted Discord responses with bullets, s
     replyText = await fallbackHandler(userQuery, channelId);
   }
 
-  // Post reply to Discord if channelId present
-  if (channelId) {
+  // Post reply to Discord if channelId present and prompt was received
+  if (channelId && prompt) {
     console.log(`[rosie] Sending reply to Discord channel ${channelId}...`);
     const baseUrl = (process.env.DISCORD_BASE_URL || 'https://discord.com/api/v10').replace(/\/$/, '');
     const isGateway = !baseUrl.includes('discord.com');
