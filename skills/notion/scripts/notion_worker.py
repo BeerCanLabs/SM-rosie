@@ -10,7 +10,7 @@ import urllib.request
 import urllib.error
 import ssl
 
-TOKEN = os.environ.get("NOTION_API_KEY") or os.environ.get("NOTION_TOKEN") or "ntn_z27608992969p2QDQcAvNeKG395NNRqlha6eOWFsD8MbyL"
+TOKEN = os.environ.get("NOTION_API_KEY") or os.environ.get("NOTION_TOKEN")
 DB_ID = os.environ.get("NOTION_DATABASE_ID") or "3d80a48f-fae0-816b-bc00-e4cba96c85aa"
 
 HEADERS = {
