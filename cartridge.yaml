@@ -18,8 +18,6 @@ secrets:
       description: "Long-lived access token for Home Assistant REST API"
     - name: HASS_URL
       description: "Home Assistant base URL"
-    - name: NOTION_API_KEY
-      description: "Notion API Key for The Submind Operations Board"
     - name: XAI_API_KEY
       description: "xAI Grok API key for robotic intelligence and tool execution"
 
@@ -48,3 +46,9 @@ skills:
     description: "Schedule automated recurring and one-off agent actions with Factory Control Plane"
   - id: notion
     description: "Task and delivery tracking on The Submind Operations Board"
+
+# Requested, not granted (E7). Notion is reached through the gateway's `notion` route, which injects the
+# shared Notion key; the agent never holds it (DESIGN_AUTHORITY S1, K5.5).
+egress:
+  routes:
+    - notion
