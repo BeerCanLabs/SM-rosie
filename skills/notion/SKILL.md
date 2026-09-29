@@ -103,3 +103,4 @@ This skill defines the unified standard operating procedure (SOP) and data schem
 1. **Never Put Secrets in Notion:** Never log API keys, private credentials, or full raw JWTs into task descriptions or comments.
 2. **Atomic Updates:** Always use the `notion_worker.py` tool to ensure consistent payload formatting and error handling.
 3. **Continuous Transparency:** Do not work silently. If a task takes more than 15 minutes, log an intermediate note.
+4. **Notion Through the Factory Gateway:** `notion_worker.py` calls `$NOTION_BASE_URL/v1/...` (the gateway's `notion` route) with `Authorization: Bearer $FACTORY_RUN_TOKEN`. The gateway injects the shared Notion integration key and ledgers every call; agents never hold it (DESIGN_AUTHORITY S1, K5.5). If `NOTION_BASE_URL` is not set the worker exits with an error; it never calls Notion directly.
