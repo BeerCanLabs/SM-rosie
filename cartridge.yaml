@@ -7,19 +7,16 @@ prompt: "./soul.md"
 triggers:
   - type: http
     path: /wake
+  # The Doorman holds Rosie's Discord presence with this bot token; Rosie never opens a Discord connection.
+  # The gateway's `discord` route injects the same token into Rosie's replies.
   - type: discord
     secretRef: ROSIE_DISCORD_BOT_TOKEN
 
+# Rosie's container holds no credential (DESIGN_AUTHORITY S1). The bot token is named by the discord trigger above
+# (listing it here would inject it into the container). The Home Assistant token is injected by the gateway's
+# `home-assistant` route. Model access goes through the factory model API (M1); Rosie holds no provider key.
 secrets:
-  requires:
-    - name: ROSIE_DISCORD_BOT_TOKEN
-      description: "Discord Bot Token for Doorman presence and home automation commands"
-    - name: HA_LONG_LIVED_TOKEN
-      description: "Long-lived access token for Home Assistant REST API"
-    - name: HASS_URL
-      description: "Home Assistant base URL"
-    - name: XAI_API_KEY
-      description: "xAI Grok API key for robotic intelligence and tool execution"
+  requires: []
 
 persistence:
   enabled: true
@@ -27,13 +24,20 @@ persistence:
 
 compute:
   kind: oci
-  ref: "566332862296.dkr.ecr.us-east-1.amazonaws.com/factory-dynamic-agents:rosie"
+  # Built by factory admission from this repository at the registered commit and deployed by SHA (L3/L4).
+  ref: "sm-rosie"
   localCommand:
     - node
     - worker.mjs
 
 runtime:
   warmDownSeconds: 3600
+
+# Preferred model, then fallback (DESIGN_AUTHORITY M2): policy decides what Rosie actually gets.
+model: claude-sonnet-4-5
+models:
+  - claude-sonnet-4-5
+  - claude-haiku-4-5
 
 skills:
   - id: home-assistant
@@ -44,11 +48,12 @@ skills:
     description: "Monitor Litter-Robot levels, waste drawer status, and health telemetry for Zander and Lexi"
   - id: action-scheduling
     description: "Schedule automated recurring and one-off agent actions with Factory Control Plane"
-  - id: notion
-    description: "Task and delivery tracking on The Submind Operations Board"
 
-# Requested, not granted (E7). Notion is reached through the gateway's `notion` route, which injects the
-# shared Notion key; the agent never holds it (DESIGN_AUTHORITY S1, K5.5).
+# Requested, not granted (E7): what Rosie's code calls. `home-assistant` is a gateway route the platform does not
+# offer yet. The shared Notion skill in skills/notion is not wired into Rosie's worker or image, so `notion` is
+# not requested.
 egress:
   routes:
-    - notion
+    - models
+    - discord
+    - home-assistant
