@@ -14,3 +14,20 @@ Validate this cartridge against the factory contract specification:
 ```bash
 npx @beercanlabs/contract validate .
 ```
+
+## How Rosie reaches the world
+Every outbound call goes through the factory with the run's token; Rosie holds no credential and has no direct path:
+
+| Service | Rosie calls | Factory path |
+| :--- | :--- | :--- |
+| Home Assistant | `$HOME_ASSISTANT_BASE_URL/api/...` | gateway `home-assistant` route (injects the HA token) |
+| Models | `$FACTORY_MODEL_BASE_URL/chat/completions` | factory model API (OpenAI Chat Completions format, metered) |
+| Discord replies | `$DISCORD_BASE_URL/channels/{id}/messages` | gateway `discord` route (injects the bot token) |
+| Schedules | `$FACTORY_URL/api/v1/schedules` | control plane |
+
+Discord presence is held by the factory Doorman (the `discord` trigger); Rosie never connects to Discord herself.
+
+## Tests
+```bash
+npm test
+```

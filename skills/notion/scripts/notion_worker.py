@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
 notion_worker.py - CLI helper for Submind agents interacting with The Submind Notion Board.
+
+Notion is reached only through the factory gateway's `notion` route (DESIGN_AUTHORITY §6.3.2 S1,
+§6.11 K5.5). The agent never holds the Notion key: the factory injects NOTION_BASE_URL (the route)
+and FACTORY_RUN_TOKEN, every request carries only `Authorization: Bearer <run token>`, and the
+gateway swaps in the shared Notion integration key and ledgers the call. There is no direct path
+to Notion (E1): without NOTION_BASE_URL the worker fails instead of calling Notion.
 """
 import os
 import sys
@@ -8,30 +14,49 @@ import json
 import argparse
 import urllib.request
 import urllib.error
-import ssl
 
-TOKEN = os.environ.get("NOTION_API_KEY") or os.environ.get("NOTION_TOKEN")
 DB_ID = os.environ.get("NOTION_DATABASE_ID") or "3d80a48f-fae0-816b-bc00-e4cba96c85aa"
+NOTION_VERSION = "2022-06-28"
 
-HEADERS = {
-    "Authorization": f"Bearer {TOKEN}",
-    "Notion-Version": "2022-06-28",
-    "Content-Type": "application/json"
-}
 
-def get_ssl_context():
-    try:
-        return ssl._create_unverified_context()
-    except Exception:
-        return ssl.create_default_context()
+class GatewayNotConfigured(RuntimeError):
+    """The factory did not inject the Notion route or the run token for this run."""
+
+
+def base_url():
+    base = (os.environ.get("NOTION_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        raise GatewayNotConfigured(
+            "NOTION_BASE_URL is not set: Notion is reached only through the factory gateway's notion route."
+        )
+    return base
+
+
+def run_token():
+    token = (os.environ.get("FACTORY_RUN_TOKEN") or "").strip()
+    if not token:
+        raise GatewayNotConfigured("FACTORY_RUN_TOKEN is not set: this run has no gateway identity.")
+    return token
+
+
+def notion_url(endpoint):
+    return f"{base_url()}/v1/{endpoint.lstrip('/')}"
+
+
+def notion_headers():
+    return {
+        "Authorization": f"Bearer {run_token()}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+    }
+
 
 def request_notion(endpoint, data=None, method="GET"):
-    url = f"https://api.notion.com/v1/{endpoint.lstrip('/')}"
+    url = notion_url(endpoint)
     body = json.dumps(data).encode("utf-8") if data else None
-    req = urllib.request.Request(url, data=body, headers=HEADERS, method=method)
+    req = urllib.request.Request(url, data=body, headers=notion_headers(), method=method)
     try:
-        ctx = get_ssl_context()
-        with urllib.request.urlopen(req, context=ctx) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8")
@@ -176,7 +201,11 @@ def main():
     p_comp.set_defaults(func=cmd_complete)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except GatewayNotConfigured as e:
+        print(f"Notion unavailable: {e}", file=sys.stderr)
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()

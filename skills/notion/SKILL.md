@@ -14,7 +14,7 @@ This skill defines the unified standard operating procedure (SOP) and data schem
 * **Data (State Store):** The real-time operational state of the business lives in Notion under **The Submind Operations Board** database.
 * **Skill (The Operating System):** This `SKILL.md` file is the **single source of truth** defining how agents interact with Notion. No agent prompt should hardcode or duplicate Notion schemas or rules.
 * **Execution Interface:** Agents interact with Notion through the standard CLI script:
-  `python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py <command>`
+  `python3 skills/notion/scripts/notion_worker.py <command>`
   or via the Submind MCP gateway.
 
 ---
@@ -60,14 +60,14 @@ This skill defines the unified standard operating procedure (SOP) and data schem
 ### Protocol 1: Morning Briefing & Sweep (Queue Discovery)
 1. At scheduled briefing times (e.g. 08:00 for Donna, 06:00 for Higgins, 09:00 for Archie) or on invocation, query assigned tasks:
    ```bash
-   python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py list --agent <agent_name> --status Backlog
+   python3 skills/notion/scripts/notion_worker.py list --agent <agent_name> --status Backlog
    ```
 2. Sort tasks by `Priority` (`Urgent` → `High` → `Normal` → `Low`).
 
 ### Protocol 2: Claiming a Task
 1. When beginning execution on a task, transition status to `In Progress`:
    ```bash
-   python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py update <task_id> --status "In Progress" --notes "Execution initiated"
+   python3 skills/notion/scripts/notion_worker.py update <task_id> --status "In Progress" --notes "Execution initiated"
    ```
 2. This immediately updates the colony 3D billboard and informs Dale that work is actively in flight.
 
@@ -77,7 +77,7 @@ This skill defines the unified standard operating procedure (SOP) and data schem
    - Update `Notes` with the exact blocker and question.
    - Alert Dale on Discord.
    ```bash
-   python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py update <task_id> --status "Blocked" --notes "Blocked: Awaiting Dale confirmation on..."
+   python3 skills/notion/scripts/notion_worker.py update <task_id> --status "Blocked" --notes "Blocked: Awaiting Dale confirmation on..."
    ```
 
 ### Protocol 4: Task Completion
@@ -86,14 +86,14 @@ This skill defines the unified standard operating procedure (SOP) and data schem
    - Set `Target URL` with the PR or output link.
    - Add a concise outcome summary in `Notes`.
    ```bash
-   python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py complete <task_id> --url "<pr_or_doc_url>" --summary "Outcome summary..."
+   python3 skills/notion/scripts/notion_worker.py complete <task_id> --url "<pr_or_doc_url>" --summary "Outcome summary..."
    ```
 
 ### Protocol 5: Creating Follow-Up Tasks
 1. If completing a task creates follow-up work for another agent (e.g. Castle finishes a blog post and needs Geordi to verify Cloudflare DNS, or Switch opens a PR and needs Archie review):
    - The agent creates a new task assigned to that agent in `Backlog`:
    ```bash
-   python3 /Users/skippy/repos/skippy-matrix/skills/notion/scripts/notion_worker.py create --title "Review PR #42 for agent-garrison" --agent Archie --domain "Agent Factory" --priority High
+   python3 skills/notion/scripts/notion_worker.py create --title "Review PR #42 for agent-garrison" --agent Archie --domain "Agent Factory" --priority High
    ```
 
 ---
@@ -103,3 +103,4 @@ This skill defines the unified standard operating procedure (SOP) and data schem
 1. **Never Put Secrets in Notion:** Never log API keys, private credentials, or full raw JWTs into task descriptions or comments.
 2. **Atomic Updates:** Always use the `notion_worker.py` tool to ensure consistent payload formatting and error handling.
 3. **Continuous Transparency:** Do not work silently. If a task takes more than 15 minutes, log an intermediate note.
+4. **Notion Through the Factory Gateway:** `notion_worker.py` calls `$NOTION_BASE_URL/v1/...` (the gateway's `notion` route) with `Authorization: Bearer $FACTORY_RUN_TOKEN`. The gateway injects the shared Notion integration key and ledgers every call; agents never hold it (DESIGN_AUTHORITY S1, K5.5). If `NOTION_BASE_URL` is not set the worker exits with an error; it never calls Notion directly.
