@@ -2,10 +2,10 @@
 """
 notion_worker.py - CLI helper for Submind agents interacting with The Submind Notion Board.
 
-Notion is reached only through the factory gateway's `notion` route (DESIGN_AUTHORITY §6.3.2 S1,
+Notion is reached only through the factory gatekeeper-egress's `notion` route (DESIGN_AUTHORITY §6.3.2 S1,
 §6.11 K5.5). The agent never holds the Notion key: the factory injects NOTION_BASE_URL (the route)
 and FACTORY_RUN_TOKEN, every request carries only `Authorization: Bearer <run token>`, and the
-gateway swaps in the shared Notion integration key and ledgers the call. There is no direct path
+gatekeeper-egress swaps in the shared Notion integration key and ledgers the call. There is no direct path
 to Notion (E1): without NOTION_BASE_URL the worker fails instead of calling Notion.
 """
 import os
@@ -19,15 +19,15 @@ DB_ID = os.environ.get("NOTION_DATABASE_ID") or "3d80a48f-fae0-816b-bc00-e4cba96
 NOTION_VERSION = "2022-06-28"
 
 
-class GatewayNotConfigured(RuntimeError):
+class GatekeeperEgressNotConfigured(RuntimeError):
     """The factory did not inject the Notion route or the run token for this run."""
 
 
 def base_url():
     base = (os.environ.get("NOTION_BASE_URL") or "").strip().rstrip("/")
     if not base:
-        raise GatewayNotConfigured(
-            "NOTION_BASE_URL is not set: Notion is reached only through the factory gateway's notion route."
+        raise GatekeeperEgressNotConfigured(
+            "NOTION_BASE_URL is not set: Notion is reached only through the factory gatekeeper-egress's notion route."
         )
     return base
 
@@ -35,7 +35,7 @@ def base_url():
 def run_token():
     token = (os.environ.get("FACTORY_RUN_TOKEN") or "").strip()
     if not token:
-        raise GatewayNotConfigured("FACTORY_RUN_TOKEN is not set: this run has no gateway identity.")
+        raise GatekeeperEgressNotConfigured("FACTORY_RUN_TOKEN is not set: this run has no gatekeeper-egress identity.")
     return token
 
 
@@ -203,7 +203,7 @@ def main():
     args = parser.parse_args()
     try:
         args.func(args)
-    except GatewayNotConfigured as e:
+    except GatekeeperEgressNotConfigured as e:
         print(f"Notion unavailable: {e}", file=sys.stderr)
         sys.exit(2)
 

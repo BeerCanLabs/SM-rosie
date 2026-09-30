@@ -20,12 +20,12 @@ Every outbound call goes through the factory with the run's token; Rosie holds n
 
 | Service | Rosie calls | Factory path |
 | :--- | :--- | :--- |
-| Home Assistant | `$HOME_ASSISTANT_BASE_URL/api/...` | gateway `home-assistant` route (injects the HA token) |
+| Home Assistant | `$HOME_ASSISTANT_BASE_URL/api/...` | gatekeeper-egress `home-assistant` route (injects the HA token) |
 | Models | `$FACTORY_MODEL_BASE_URL/chat/completions` | factory model API (OpenAI Chat Completions format, metered) |
-| Discord replies | `$DISCORD_BASE_URL/channels/{id}/messages` | gateway `discord` route (injects the bot token) |
+| Discord replies | `$DISCORD_BASE_URL/channels/{id}/messages` | gatekeeper-egress `discord` route (injects the bot token) |
 | Schedules | `$FACTORY_URL/api/v1/schedules` | control plane |
 
-Discord presence is held by the factory Doorman (the `discord` trigger); Rosie never connects to Discord herself.
+Discord presence is held by the factory gatekeeper-ingress (the `discord` trigger); Rosie never connects to Discord herself.
 
 ## Tests
 ```bash

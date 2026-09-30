@@ -1,10 +1,10 @@
 # Rosie runs under the factory shim (@beercanlabs/factory-hydrate), which pulls her mind into $MEMORY_DIR, points
-# egress at the gateway (sets FACTORY_MODEL_BASE_URL, DISCORD_BASE_URL, ...), heartbeats, runs `node worker.mjs`,
+# egress at the gatekeeper-egress (sets FACTORY_MODEL_BASE_URL, DISCORD_BASE_URL, ...), heartbeats, runs `node worker.mjs`,
 # reports the result file, and pushes the mind back (DESIGN_AUTHORITY §6.6).
 
 # ---- Stage 1: build the factory shim from a pinned agent-factory commit ----
 FROM public.ecr.aws/docker/library/node:22-bookworm-slim AS shim
-ARG AGENT_FACTORY_REF=f53cee0beb8eee6a9c0dd81867ed18d0dfa6311d
+ARG AGENT_FACTORY_REF=6c9f8576f72f060c91c35e523fef48b9f0702c31
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
