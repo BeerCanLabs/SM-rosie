@@ -7,13 +7,13 @@ prompt: "./soul.md"
 triggers:
   - type: http
     path: /wake
-  # The Doorman holds Rosie's Discord presence with this bot token; Rosie never opens a Discord connection.
-  # The gateway's `discord` route injects the same token into Rosie's replies.
+  # The gatekeeper-ingress holds Rosie's Discord presence with this bot token; Rosie never opens a Discord connection.
+  # The gatekeeper-egress's `discord` route injects the same token into Rosie's replies.
   - type: discord
     secretRef: ROSIE_DISCORD_BOT_TOKEN
 
 # Rosie's container holds no credential (DESIGN_AUTHORITY S1). The bot token is named by the discord trigger above
-# (listing it here would inject it into the container). The Home Assistant token is injected by the gateway's
+# (listing it here would inject it into the container). The Home Assistant token is injected by the gatekeeper-egress's
 # `home-assistant` route. Model access goes through the factory model API (M1); Rosie holds no provider key.
 secrets:
   requires: []
@@ -49,7 +49,7 @@ skills:
   - id: action-scheduling
     description: "Schedule automated recurring and one-off agent actions with Factory Control Plane"
 
-# Requested, not granted (E7): what Rosie's code calls. `home-assistant` is a gateway route the platform does not
+# Requested, not granted (E7): what Rosie's code calls. `home-assistant` is a gatekeeper-egress route the platform does not
 # offer yet. The shared Notion skill in skills/notion is not wired into Rosie's worker or image, so `notion` is
 # not requested.
 egress:

@@ -1,5 +1,5 @@
 // Rosie reaches the world only through the factory (DESIGN_AUTHORITY E1, E5, S1, M1): Home Assistant through the
-// gateway's home-assistant route, models through the factory model API, Discord replies through the discord route,
+// gatekeeper-egress's home-assistant route, models through the factory model API, Discord replies through the discord route,
 // schedules through the control plane. Every call carries only the run token; nothing has a direct fallback.
 import { test, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -123,7 +123,7 @@ test('when the model API fails, the deterministic fallback still answers over th
   assertOnlyRunToken();
 });
 
-test('without the gateway routes Rosie calls nothing directly (E1)', async () => {
+test('without the gatekeeper-egress routes Rosie calls nothing directly (E1)', async () => {
   setEnv({ HOME_ASSISTANT_BASE_URL: undefined, DISCORD_BASE_URL: undefined, FACTORY_MODEL_BASE_URL: undefined });
   await assert.rejects(worker.hassGetStates('bar'), /HOME_ASSISTANT_BASE_URL is not set/);
   const reply = await worker.handleTurn({ content: 'how is the litter?', channelId: '9' });

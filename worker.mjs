@@ -2,11 +2,11 @@
 //
 // How Rosie reaches the world (agent-factory DESIGN_AUTHORITY §6.3.1 E1/E5, §6.3.2 S1, §6.9 M1). Every outbound
 // call goes through the factory, carries only this run's token, and has no direct fallback:
-//   Home Assistant  -> $HOME_ASSISTANT_BASE_URL   gateway `home-assistant` route; the gateway injects the HA token
+//   Home Assistant  -> $HOME_ASSISTANT_BASE_URL   gatekeeper-egress `home-assistant` route; the gatekeeper-egress injects the HA token
 //   models          -> $FACTORY_MODEL_BASE_URL    factory model API (OpenAI Chat Completions format), metered
-//   Discord replies -> $DISCORD_BASE_URL          gateway `discord` route; the gateway injects Rosie's bot token
+//   Discord replies -> $DISCORD_BASE_URL          gatekeeper-egress `discord` route; the gatekeeper-egress injects Rosie's bot token
 //   schedules       -> $FACTORY_URL/api/v1/...    control plane, authenticated by the run token
-// Rosie holds no credential. Discord presence belongs to the Doorman; Rosie never opens a Discord connection.
+// Rosie holds no credential. Discord presence belongs to the gatekeeper-ingress; Rosie never opens a Discord connection.
 // The factory shim (Dockerfile ENTRYPOINT) sets these variables, hydrates $MEMORY_DIR and heartbeats.
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -29,10 +29,10 @@ const trimSlash = (s) => s.replace(/\/+$/, '');
 const runToken = () => requireEnv('FACTORY_RUN_TOKEN', 'this run has no factory identity');
 const bearer = () => ({ Authorization: `Bearer ${runToken()}` });
 
-// --- Home Assistant Operations (gateway `home-assistant` route) ---
+// --- Home Assistant Operations (gatekeeper-egress `home-assistant` route) ---
 
 function haBase() {
-  return trimSlash(requireEnv('HOME_ASSISTANT_BASE_URL', "Home Assistant is reached only through the factory gateway's home-assistant route"));
+  return trimSlash(requireEnv('HOME_ASSISTANT_BASE_URL', "Home Assistant is reached only through the factory gatekeeper-egress's home-assistant route"));
 }
 
 async function haFetch(path, init = {}) {
@@ -297,12 +297,12 @@ async function chatCompletion(body) {
   return JSON.parse(text);
 }
 
-// --- Discord replies (gateway `discord` route) ---
+// --- Discord replies (gatekeeper-egress `discord` route) ---
 
 export async function postDiscordReply(channelId, text) {
   const base = (process.env.DISCORD_BASE_URL || '').trim();
   if (!base) {
-    console.warn("[rosie] DISCORD_BASE_URL is not set: Discord is reached only through the factory gateway's discord route; not replying.");
+    console.warn("[rosie] DISCORD_BASE_URL is not set: Discord is reached only through the factory gatekeeper-egress's discord route; not replying.");
     return false;
   }
   const res = await fetch(`${trimSlash(base)}/channels/${encodeURIComponent(channelId)}/messages`, {

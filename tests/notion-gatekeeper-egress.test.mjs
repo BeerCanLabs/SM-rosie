@@ -1,4 +1,4 @@
-// Notion goes through the factory gateway's `notion` route (DESIGN_AUTHORITY §6.3.2 S1, §6.11 K5.5).
+// Notion goes through the factory gatekeeper-egress's `notion` route (DESIGN_AUTHORITY §6.3.2 S1, §6.11 K5.5).
 // Rosie sends only her run token; she never holds or sends the Notion key, and has no direct path
 // to Notion when the route is not configured (E1).
 import { test } from 'node:test';
@@ -25,7 +25,7 @@ function run(env) {
   });
 }
 
-test('the notion worker calls the gateway route with the run token only', async () => {
+test('the notion worker calls the gatekeeper-egress route with the run token only', async () => {
   const seen = [];
   const server = http.createServer((req, res) => {
     let body = '';
@@ -52,7 +52,7 @@ test('the notion worker calls the gateway route with the run token only', async 
   }
 });
 
-test('the notion worker fails clearly without the gateway route', async () => {
+test('the notion worker fails clearly without the gatekeeper-egress route', async () => {
   const out = await run({ FACTORY_RUN_TOKEN: RUN_TOKEN, NOTION_API_KEY: NOT_THE_KEY });
   assert.equal(out.code, 2);
   assert.match(out.stderr, /NOTION_BASE_URL/);
