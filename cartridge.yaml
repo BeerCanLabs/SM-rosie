@@ -41,13 +41,41 @@ models:
 
 skills:
   - id: home-assistant
+    name: "Home Assistant Devices & Scenes"
     description: "Manage Home Assistant devices, scenes, states, and automations"
+    system: "Home Assistant REST & WebSocket API"
+    secretRef: HOME_ASSISTANT_TOKEN
+    hold: "none"
+    injection: "gatekeeper-egress"
   - id: home-assistant-automations
+    name: "Home Assistant Automation Management"
     description: "Create, update, toggle, reload, and troubleshoot Home Assistant automations"
+    system: "Home Assistant REST API"
+    secretRef: HOME_ASSISTANT_TOKEN
+    hold: "Required for creating/deleting automations; toggling autonomous"
+    injection: "gatekeeper-egress"
   - id: kitty-litter-monitoring
+    name: "Litter-Robot Telemetry & Alerts"
     description: "Monitor Litter-Robot levels, waste drawer status, and health telemetry for Zander and Lexi"
+    system: "Home Assistant REST API"
+    secretRef: HOME_ASSISTANT_TOKEN
+    hold: "none"
+    injection: "gatekeeper-egress"
   - id: action-scheduling
+    name: "Factory Action Scheduling"
     description: "Schedule automated recurring and one-off agent actions with Factory Control Plane"
+    system: "Factory Control Plane API"
+    secretRef: FACTORY_API_KEY
+    hold: "none"
+    injection: "gatekeeper-egress"
+  - id: discord-reply
+    name: "Discord Conversational Reply"
+    description: "Deliver conversational turn responses to Discord channels"
+    system: "Discord REST API"
+    secretRef: ROSIE_DISCORD_BOT_TOKEN
+    hold: "none"
+    injection: "gatekeeper-egress"
+
 
 # Requested, not granted (E7): what Rosie's code calls. `home-assistant` is a gateway route the platform does not
 # offer yet. The shared Notion skill in skills/notion is not wired into Rosie's worker or image, so `notion` is
